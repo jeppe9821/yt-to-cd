@@ -3,13 +3,17 @@ use std::thread::spawn;
 
 use crate::core::ytdownload;
 
-use iced::{Length};
+use iced::{Application, Length};
 use iced::widget::{Column, column, row, text_input, button, text, scrollable};
 use iced::widget::scrollable::{Id};
 use iced::Task;
 use std::fs;
 
-use std::process::Command as ProcessCommand;
+//use std::process::Command as ProcessCommand;
+
+use tokio::io::{BufReader, AsyncBufReadExt};
+use tokio::process::Command as ProcessCommand;
+use std::process::{Stdio};
 
 use crate::binary_inc;
 
@@ -34,13 +38,13 @@ const LOGS_SCROLL_ID: &str = "logs_scroll";
 
 pub trait App {
     fn new(_flags: ()) -> (ApplicationState, Task<Message>);
-    fn install_ytdlp(&mut self) -> PathBuf;
-    fn download(&mut self) -> Result<String,String>;
+    async fn install_ytdlp() -> PathBuf;
+    async fn download() -> Result<String,String>;
     fn update(&mut self, message: Message) -> Task<Message>;
     fn view(&self) -> Column<Message>;
 }
 
-fn install_ffmpeg() -> () {
+/*fn install_ffmpeg() -> () {
     let ffmpeg_path = binary_inc::save_ffmpeg_to_file()
         .unwrap();
 
@@ -52,7 +56,7 @@ fn install_ffmpeg() -> () {
             println!("ffmpeg is running on version {prnt}");
         }
     }
-}
+}*/
 
 impl App for ApplicationState {
     fn new(_flags: ()) -> (Self, Task<Message>) {
@@ -74,32 +78,48 @@ impl App for ApplicationState {
         )
     }
 
-    fn install_ytdlp(&mut self) -> PathBuf {
+    async fn install_ytdlp() -> PathBuf {
         let ytdlp_path = binary_inc::save_ytdlp_to_file()
             .unwrap();
 
-        if let Ok(output) = ProcessCommand::new(&ytdlp_path).arg("--version").output() {
-            if output.status.success() {
-                let prnt: String = String::from_utf8(output.stdout)
-                    .unwrap();
+        let mut command = ProcessCommand::new(&ytdlp_path);
+        command.arg("--version");
+        command.stderr(Stdio::piped());
 
-                self.logs.push(format!("yt-dlp is running on version {prnt}"));
-            } else {
-                self.logs.push("yt-dlp could not be installed".to_owned());
-                self.logs.push(format!("Exit code: {:?}", output.status.code()));
-                self.logs.push(format!("stdout: {}", String::from_utf8_lossy(&output.stdout)));
-                self.logs.push(format!("stderr: {}", String::from_utf8_lossy(&output.stderr)));
-            }
+        let mut child = command.spawn()
+            .expect("Failed to spawn process");
+
+        let stderr = child.stderr.take()
+            .expect("Process did not have any errors");
+
+        let mut stderr_reader = BufReader::new(stderr).lines();
+
+        tokio::spawn(async move {
+            let status = child.wait().await
+                .expect("Process encountered an error");
+            println!("Process status was: {}", status);
+        });
+
+        while let Some(line) = stderr_reader.next_line().await.unwrap_or_else(|e| {
+            eprintln!("Failed to read line: {}", e);
+            None
+        }) {
+            println!("Stderr line: {}", line);
         }
 
         ytdlp_path
     }
 
-    fn download(&mut self) -> Result<String,String> {
-        self.logs.push("Installing yt-dlp".to_owned());
+    async fn download() -> Result<String,String> {
+        //self.logs.push("Installing yt-dlp".to_owned());
 
-        let ytdlp_path: PathBuf = self.install_ytdlp();
+        let ytdlp_path: PathBuf = ApplicationState::install_ytdlp().await;
 
+        let display = ytdlp_path.display();
+
+        println!("YDLP path: {display}");
+
+        /*
         let download_dir: PathBuf = Path::new(&self.directory_path).to_path_buf();
         let output_template: PathBuf = download_dir.join("%(title)s.%(ext)s");
 
@@ -120,7 +140,7 @@ impl App for ApplicationState {
             .current_dir(download_dir);
         
         command.spawn()
-            .expect("Failed to start");
+            .expect("Failed to start");*/
 
         Ok("Result goes here".to_string())
     }
@@ -136,14 +156,14 @@ impl App for ApplicationState {
                 Task::none()
             }
             Message::DownloadYt => {
-                let download_result: Result<String, String> = self.download();
-
-                let result = match download_result {
-                    Ok(_) => Message::Completed,
-                    Err(e) => Message::DownloadFailed(e)
-                };
-
-                Task::done(result)
+                Task::perform(async move {
+                    ApplicationState::download().await
+                }, | result| {
+                    match result {
+                        Ok(_) => Message::Completed,
+                        Err(e) => Message::DownloadFailed(e),
+                    }
+                })
             },
             Message::Completed => {
                 println!("The files has been downloaded correctly");

@@ -6,4 +6,4 @@ edition = "2024"
 [dependencies]
 dirs = "6.0.0"
 iced = { version = "0.13.1", features = ["image"] }
-tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
+tokio = { version = "1", features = ["sync", "rt-multi-thread", "process", "io-util", "io-std"] }
