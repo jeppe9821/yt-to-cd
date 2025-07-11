@@ -7,7 +7,7 @@ const FFMPEG_BINARY: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), 
 const YTDLP_BINARY: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/yt-dlp.exe"));
 
 fn save_to_file(file: &str, binary: &[u8]) -> Result<PathBuf, Error> {
-    let bin_directory = Path::new("\\WEWMYPATH");
+    let bin_directory = Path::new("\\bin");
     let exists: bool = Path::exists(bin_directory);
 
     if exists == false {
@@ -28,9 +28,9 @@ fn save_to_file(file: &str, binary: &[u8]) -> Result<PathBuf, Error> {
 }
 
 pub fn save_ytdlp_to_file() -> Result<PathBuf, Error> {
-    save_to_file("yt-dlp.exe", FFMPEG_BINARY)
+    save_to_file("yt-dlp.exe", YTDLP_BINARY)
 }
 
 pub fn save_ffmpeg_to_file() -> Result<PathBuf, Error> {
-    save_to_file("ffmpeg.exe", YTDLP_BINARY)
+    save_to_file("ffmpeg.exe", FFMPEG_BINARY)
 }
